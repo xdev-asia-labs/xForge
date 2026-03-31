@@ -1,0 +1,21 @@
+name: postgresql-patroni
+version: "16"
+description: "PostgreSQL HA cluster with Patroni + etcd"
+params:
+  - name: cluster_name
+    type: string
+    default: "pg-main"
+  - name: replication_user
+    type: string
+    default: "replicator"
+  - name: patroni_scope
+    type: string
+    default: "pg-cluster"
+requires:
+  min_servers: 3
+  os: "ubuntu-22.04+"
+playbook: playbook.yml
+tags:
+  - database
+  - postgresql
+  - ha

@@ -1,0 +1,24 @@
+name: k8s-cluster
+version: "1.29"
+description: "Production Kubernetes cluster with kubeadm"
+params:
+  - name: cluster_name
+    type: string
+    default: "k8s-main"
+  - name: pod_network_cidr
+    type: string
+    default: "10.244.0.0/16"
+  - name: service_cidr
+    type: string
+    default: "10.96.0.0/12"
+  - name: cni_plugin
+    type: string
+    default: "flannel"
+requires:
+  min_servers: 3
+  os: "ubuntu-22.04+"
+playbook: playbook.yml
+tags:
+  - kubernetes
+  - container-orchestration
+  - cluster

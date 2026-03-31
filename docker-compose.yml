@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  xforge:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - xforge-data:/app/data
+      - ./recipes:/app/recipes:ro
+      - ~/.ssh:/root/.ssh:ro
+    environment:
+      - DATABASE_URL=sqlite:/app/data/xforge.db?mode=rwc
+      - JWT_SECRET=change-this-to-a-secure-random-string
+      - HOST=0.0.0.0
+      - PORT=3000
+      - RECIPES_DIR=/app/recipes
+      - RUST_LOG=xforge=info
+    restart: unless-stopped
+
+volumes:
+  xforge-data:

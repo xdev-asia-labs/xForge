@@ -1,0 +1,145 @@
+---
+- name: Deploy PostgreSQL HA with Patroni
+  hosts: all
+  become: true
+  vars:
+    cluster_name: "{{ cluster_name | default('pg-main') }}"
+    replication_user: "{{ replication_user | default('replicator') }}"
+    patroni_scope: "{{ patroni_scope | default('pg-cluster') }}"
+    pg_version: "16"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-psycopg2
+          - etcd
+          - postgresql-{{ pg_version }}
+          - postgresql-client-{{ pg_version }}
+        state: present
+
+    - name: Install Patroni
+      pip:
+        name:
+          - patroni[etcd]
+        executable: pip3
+        state: present
+
+    - name: Stop default PostgreSQL
+      systemd:
+        name: "postgresql@{{ pg_version }}-main"
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+
+    - name: Configure etcd
+      template:
+        content: |
+          ETCD_NAME={{ inventory_hostname }}
+          ETCD_DATA_DIR=/var/lib/etcd/default
+          ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+          ETCD_ADVERTISE_CLIENT_URLS=http://{{ ansible_default_ipv4.address }}:2379
+          ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+          ETCD_INITIAL_ADVERTISE_PEER_URLS=http://{{ ansible_default_ipv4.address }}:2380
+          ETCD_INITIAL_CLUSTER={{ groups['all'] | map('regex_replace', '^(.*)$', '\\1=http://\\1:2380') | join(',') }}
+          ETCD_INITIAL_CLUSTER_STATE=new
+        dest: /etc/default/etcd
+      notify: restart etcd
+
+    - name: Start etcd
+      systemd:
+        name: etcd
+        state: started
+        enabled: yes
+
+    - name: Create Patroni configuration
+      template:
+        content: |
+          scope: {{ patroni_scope }}
+          name: {{ inventory_hostname }}
+
+          etcd:
+            hosts: {% for host in groups['all'] %}{{ hostvars[host]['ansible_default_ipv4']['address'] }}:2379{% if not loop.last %},{% endif %}{% endfor %}
+
+          bootstrap:
+            dcs:
+              ttl: 30
+              loop_wait: 10
+              retry_timeout: 10
+              maximum_lag_on_failover: 1048576
+              postgresql:
+                use_pg_rewind: true
+                parameters:
+                  max_connections: 100
+                  shared_buffers: 256MB
+
+            initdb:
+              - encoding: UTF8
+              - data-checksums
+
+          postgresql:
+            listen: 0.0.0.0:5432
+            connect_address: {{ ansible_default_ipv4.address }}:5432
+            data_dir: /var/lib/postgresql/{{ pg_version }}/patroni
+            bin_dir: /usr/lib/postgresql/{{ pg_version }}/bin
+            authentication:
+              replication:
+                username: {{ replication_user }}
+                password: replicator_password
+              superuser:
+                username: postgres
+                password: postgres_password
+
+          restapi:
+            listen: 0.0.0.0:8008
+            connect_address: {{ ansible_default_ipv4.address }}:8008
+        dest: /etc/patroni.yml
+        owner: postgres
+        group: postgres
+        mode: "0600"
+      notify: restart patroni
+
+    - name: Create Patroni systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Patroni PostgreSQL HA
+          After=network.target etcd.service
+
+          [Service]
+          User=postgres
+          Group=postgres
+          ExecStart=/usr/local/bin/patroni /etc/patroni.yml
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/patroni.service
+      notify: restart patroni
+
+    - name: Start Patroni
+      systemd:
+        name: patroni
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  handlers:
+    - name: restart etcd
+      systemd:
+        name: etcd
+        state: restarted
+
+    - name: restart patroni
+      systemd:
+        name: patroni
+        state: restarted
+        daemon_reload: yes

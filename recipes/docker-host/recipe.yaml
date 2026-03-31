@@ -1,0 +1,18 @@
+name: docker-host
+version: "24"
+description: "Docker CE installation with best practices"
+params:
+  - name: docker_compose
+    type: boolean
+    default: true
+  - name: storage_driver
+    type: string
+    default: "overlay2"
+requires:
+  min_servers: 1
+  os: "ubuntu-22.04+"
+playbook: playbook.yml
+tags:
+  - docker
+  - containers
+  - runtime

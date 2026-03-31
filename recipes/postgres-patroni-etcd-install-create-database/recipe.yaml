@@ -1,0 +1,8 @@
+name: postgres patroni etcd install — create database
+version: auto
+description: 'Playbook: playbooks/create-database.yml'
+params: null
+requires: null
+playbook: /home/duytd20/Desktop/xdev/xForge/sources/d99f1be2-e153-4b9a-98f9-14831f1b90c2/playbooks/create-database.yml
+tags:
+- auto-detected

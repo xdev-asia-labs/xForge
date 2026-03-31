@@ -1,0 +1,75 @@
+---
+- name: Gather system info and setup basic utilities
+  hosts: all
+  become: true
+  vars:
+    install_htop: "{{ install_htop | default(true) }}"
+    custom_motd: "{{ custom_motd | default('Managed by xForge') }}"
+
+  tasks:
+    - name: Gather facts
+      setup:
+
+    - name: Display system information
+      debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          Architecture: {{ ansible_architecture }}
+          CPUs: {{ ansible_processor_vcpus }}
+          Memory: {{ ansible_memtotal_mb }} MB
+          Python: {{ ansible_python_version }}
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install basic utilities
+      apt:
+        name:
+          - curl
+          - wget
+          - vim
+          - net-tools
+        state: present
+
+    - name: Install htop if requested
+      apt:
+        name: htop
+        state: present
+      when: install_htop | bool
+
+    - name: Set custom MOTD
+      copy:
+        content: |
+          ========================================
+          {{ custom_motd }}
+          Host: {{ ansible_hostname }}
+          Managed at: {{ ansible_date_time.iso8601 }}
+          ========================================
+        dest: /etc/motd
+        mode: "0644"
+
+    - name: Create xforge marker file
+      copy:
+        content: |
+          xforge_managed=true
+          recipe=system-info
+          deployed_at={{ ansible_date_time.iso8601 }}
+        dest: /etc/xforge-info
+        mode: "0644"
+
+    - name: Verify installation
+      command: "{{ item }}"
+      loop:
+        - curl --version
+        - vim --version
+      register: verify_result
+      changed_when: false
+
+    - name: Display verification results
+      debug:
+        msg: "{{ item.stdout_lines[0] }}"
+      loop: "{{ verify_result.results }}"

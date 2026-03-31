@@ -1,0 +1,144 @@
+---
+- name: Deploy Kubernetes Cluster
+  hosts: all
+  become: true
+  vars:
+    cluster_name: "{{ cluster_name | default('k8s-main') }}"
+    pod_network_cidr: "{{ pod_network_cidr | default('10.244.0.0/16') }}"
+    service_cidr: "{{ service_cidr | default('10.96.0.0/12') }}"
+    cni_plugin: "{{ cni_plugin | default('flannel') }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - software-properties-common
+        state: present
+
+    - name: Disable swap
+      command: swapoff -a
+      changed_when: false
+
+    - name: Remove swap from fstab
+      lineinfile:
+        path: /etc/fstab
+        regexp: '\sswap\s'
+        state: absent
+
+    - name: Load kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Set sysctl parameters
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+        reload: yes
+      loop:
+        - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { key: "net.ipv4.ip_forward", value: "1" }
+
+    - name: Install containerd
+      apt:
+        name: containerd
+        state: present
+
+    - name: Configure containerd
+      shell: |
+        mkdir -p /etc/containerd
+        containerd config default > /etc/containerd/config.toml
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+      notify: restart containerd
+
+    - name: Add Kubernetes apt key
+      apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+        state: present
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: "deb https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+        state: present
+
+    - name: Install Kubernetes packages
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+  handlers:
+    - name: restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        daemon_reload: yes
+
+- name: Initialize control plane
+  hosts: all[0]
+  become: true
+  tasks:
+    - name: Initialize Kubernetes cluster
+      command: >
+        kubeadm init
+        --pod-network-cidr={{ pod_network_cidr }}
+        --service-cidr={{ service_cidr }}
+      register: kubeadm_init
+      changed_when: "'Your Kubernetes control-plane has initialized' in kubeadm_init.stdout"
+
+    - name: Create .kube directory
+      file:
+        path: /root/.kube
+        state: directory
+        mode: "0755"
+
+    - name: Copy admin.conf
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        mode: "0600"
+
+    - name: Get join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+      changed_when: false
+
+    - name: Set join command as fact
+      set_fact:
+        kubeadm_join_command: "{{ join_command.stdout }}"
+
+- name: Join worker nodes
+  hosts: all[1:]
+  become: true
+  tasks:
+    - name: Join cluster
+      command: "{{ hostvars[groups['all'][0]]['kubeadm_join_command'] }}"
+      register: join_result
+      changed_when: "'This node has joined the cluster' in join_result.stdout"

@@ -1,0 +1,18 @@
+name: system-info
+version: "1.0"
+description: "Gather system information and install basic utilities"
+params:
+  - name: install_htop
+    type: boolean
+    default: true
+  - name: custom_motd
+    type: string
+    default: "Managed by xForge"
+requires:
+  min_servers: 1
+  os: "ubuntu-22.04+"
+playbook: playbook.yml
+tags:
+  - utility
+  - monitoring
+  - test
