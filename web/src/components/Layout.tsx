@@ -9,7 +9,11 @@ const navItems = [
   { path: '/servers', label: 'Servers', icon: '⬡' },
   { path: '/recipes', label: 'Recipes', icon: '◈' },
   { path: '/jobs', label: 'Jobs', icon: '▶' },
+  { path: '/schedules', label: 'Schedules', icon: '⏱' },
+  { path: '/keys', label: 'Key Store', icon: '⚿' },
   { path: '/marketplace', label: 'Marketplace', icon: '⬙' },
+  { path: '/users', label: 'Users', icon: '⚑' },
+  { path: '/settings', label: 'Settings', icon: '⚙' },
 ];
 
 export default function Layout({ onLogout }: LayoutProps) {

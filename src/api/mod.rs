@@ -1,6 +1,11 @@
 pub mod auth;
 pub mod jobs;
+pub mod keys;
+pub mod notifications;
 pub mod recipes;
+pub mod schedules;
 pub mod servers;
 pub mod sources;
+pub mod terminal;
+pub mod users;
 pub mod ws;

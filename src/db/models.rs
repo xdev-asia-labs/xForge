@@ -7,7 +7,49 @@ pub struct User {
     pub username: String,
     pub password_hash: String,
     pub role: String,
+    pub email: Option<String>,
+    pub display_name: Option<String>,
     pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserResponse {
+    pub id: String,
+    pub username: String,
+    pub role: String,
+    pub email: Option<String>,
+    pub display_name: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+impl From<User> for UserResponse {
+    fn from(u: User) -> Self {
+        UserResponse {
+            id: u.id,
+            username: u.username,
+            role: u.role,
+            email: u.email,
+            display_name: u.display_name,
+            created_at: u.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUser {
+    pub username: String,
+    pub password: String,
+    pub role: Option<String>,
+    pub email: Option<String>,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateUser {
+    pub password: Option<String>,
+    pub role: Option<String>,
+    pub email: Option<String>,
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -23,6 +65,7 @@ pub struct Server {
     pub status: String,
     pub last_health_check: Option<NaiveDateTime>,
     pub created_at: Option<NaiveDateTime>,
+    pub key_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +81,7 @@ pub struct ServerResponse {
     pub status: String,
     pub last_health_check: Option<NaiveDateTime>,
     pub created_at: Option<NaiveDateTime>,
+    pub key_id: Option<String>,
 }
 
 impl From<Server> for ServerResponse {
@@ -59,6 +103,7 @@ impl From<Server> for ServerResponse {
             status: s.status,
             last_health_check: s.last_health_check,
             created_at: s.created_at,
+            key_id: s.key_id,
         }
     }
 }
@@ -72,6 +117,7 @@ pub struct CreateServer {
     pub ssh_key_path: Option<String>,
     pub labels: Option<Vec<String>>,
     pub group_name: Option<String>,
+    pub key_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +129,7 @@ pub struct UpdateServer {
     pub ssh_key_path: Option<String>,
     pub labels: Option<Vec<String>>,
     pub group_name: Option<String>,
+    pub key_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -170,8 +217,14 @@ pub struct Claims {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub server_count: i64,
+    pub servers_online: i64,
+    pub servers_offline: i64,
     pub active_jobs: i64,
+    pub total_jobs: i64,
+    pub successful_jobs: i64,
+    pub failed_jobs: i64,
     pub recent_jobs: Vec<JobResponse>,
+    pub active_schedules: i64,
 }
 
 // ─── Marketplace: Recipe Sources ─────────────────────────────────────────────
@@ -257,4 +310,167 @@ pub struct AuditLog {
     pub resource_type: Option<String>,
     pub resource_id: Option<String>,
     pub created_at: Option<NaiveDateTime>,
+}
+
+// ─── Key Store ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct KeyStoreEntry {
+    pub id: String,
+    pub name: String,
+    pub key_type: String,
+    pub key_data: String,
+    pub description: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyStoreResponse {
+    pub id: String,
+    pub name: String,
+    pub key_type: String,
+    pub has_data: bool,
+    pub description: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+impl From<KeyStoreEntry> for KeyStoreResponse {
+    fn from(k: KeyStoreEntry) -> Self {
+        KeyStoreResponse {
+            id: k.id,
+            name: k.name,
+            key_type: k.key_type,
+            has_data: !k.key_data.is_empty(),
+            description: k.description,
+            created_by: k.created_by,
+            created_at: k.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateKeyStoreEntry {
+    pub name: String,
+    pub key_type: String,
+    pub key_data: String,
+    pub description: Option<String>,
+}
+
+// ─── Schedules ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Schedule {
+    pub id: String,
+    pub name: String,
+    pub recipe_name: String,
+    pub server_ids: String,
+    pub params: Option<String>,
+    pub cron_expression: String,
+    pub enabled: i64,
+    pub last_run_at: Option<NaiveDateTime>,
+    pub next_run_at: Option<NaiveDateTime>,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleResponse {
+    pub id: String,
+    pub name: String,
+    pub recipe_name: String,
+    pub server_ids: Vec<String>,
+    pub params: Option<serde_json::Value>,
+    pub cron_expression: String,
+    pub enabled: bool,
+    pub last_run_at: Option<NaiveDateTime>,
+    pub next_run_at: Option<NaiveDateTime>,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+impl From<Schedule> for ScheduleResponse {
+    fn from(s: Schedule) -> Self {
+        ScheduleResponse {
+            id: s.id,
+            name: s.name,
+            recipe_name: s.recipe_name,
+            server_ids: serde_json::from_str(&s.server_ids).unwrap_or_default(),
+            params: s.params.as_deref().and_then(|p| serde_json::from_str(p).ok()),
+            cron_expression: s.cron_expression,
+            enabled: s.enabled != 0,
+            last_run_at: s.last_run_at,
+            next_run_at: s.next_run_at,
+            created_by: s.created_by,
+            created_at: s.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSchedule {
+    pub name: String,
+    pub recipe_name: String,
+    pub server_ids: Vec<String>,
+    pub params: Option<serde_json::Value>,
+    pub cron_expression: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSchedule {
+    pub name: Option<String>,
+    pub cron_expression: Option<String>,
+    pub server_ids: Option<Vec<String>>,
+    pub params: Option<serde_json::Value>,
+    pub enabled: Option<bool>,
+}
+
+// ─── Notification Channels ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct NotificationChannel {
+    pub id: String,
+    pub name: String,
+    pub channel_type: String,
+    pub config: String,
+    pub events: String,
+    pub enabled: i64,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationChannelResponse {
+    pub id: String,
+    pub name: String,
+    pub channel_type: String,
+    pub config: serde_json::Value,
+    pub events: Vec<String>,
+    pub enabled: bool,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+impl From<NotificationChannel> for NotificationChannelResponse {
+    fn from(n: NotificationChannel) -> Self {
+        NotificationChannelResponse {
+            id: n.id,
+            name: n.name,
+            channel_type: n.channel_type,
+            config: serde_json::from_str(&n.config).unwrap_or(serde_json::json!({})),
+            events: serde_json::from_str(&n.events).unwrap_or_default(),
+            enabled: n.enabled != 0,
+            created_by: n.created_by,
+            created_at: n.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateNotificationChannel {
+    pub name: String,
+    pub channel_type: String,
+    pub config: serde_json::Value,
+    pub events: Vec<String>,
 }

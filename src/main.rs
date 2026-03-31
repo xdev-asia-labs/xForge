@@ -75,16 +75,29 @@ async fn main() -> anyhow::Result<()> {
         log_broadcast: log_tx,
     };
 
+    // Start background scheduler
+    let scheduler_state = state.clone();
+    tokio::spawn(async move {
+        core::scheduler::start_scheduler(scheduler_state).await;
+    });
+
     // Public routes (no auth required)
     let public_routes = Router::new()
         .route("/api/auth/login", post(api::auth::login))
-        .route("/api/ws", get(api::ws::ws_handler));
+        .route("/api/ws", get(api::ws::ws_handler))
+        .route("/api/terminal", get(api::terminal::terminal_handler));
 
     // Protected routes (auth required)
     let protected_routes = Router::new()
         .route("/api/dashboard", get(api::jobs::dashboard))
+        // Servers
         .route("/api/servers", get(api::servers::list_servers))
         .route("/api/servers", post(api::servers::create_server))
+        .route("/api/servers/groups", get(api::servers::list_groups))
+        .route(
+            "/api/servers/bulk/health-check",
+            post(api::servers::bulk_health_check),
+        )
         .route("/api/servers/:id", get(api::servers::get_server))
         .route("/api/servers/:id", put(api::servers::update_server))
         .route("/api/servers/:id", delete(api::servers::delete_server))
@@ -92,12 +105,43 @@ async fn main() -> anyhow::Result<()> {
             "/api/servers/:id/health",
             post(api::servers::health_check),
         )
+        // Recipes
         .route("/api/recipes", get(api::recipes::list_recipes))
         .route("/api/recipes/:name", get(api::recipes::get_recipe))
+        // Jobs
         .route("/api/jobs", get(api::jobs::list_jobs))
         .route("/api/jobs", post(api::jobs::create_job))
         .route("/api/jobs/:id", get(api::jobs::get_job))
         .route("/api/jobs/:id/cancel", post(api::jobs::cancel_job))
+        .route("/api/jobs/:id/rerun", post(api::jobs::rerun_job))
+        // Users
+        .route("/api/users", get(api::users::list_users))
+        .route("/api/users", post(api::users::create_user))
+        .route("/api/users/me", get(api::users::get_current_user))
+        .route("/api/users/:id", put(api::users::update_user))
+        .route("/api/users/:id", delete(api::users::delete_user))
+        // Key Store
+        .route("/api/keys", get(api::keys::list_keys))
+        .route("/api/keys", post(api::keys::create_key))
+        .route("/api/keys/:id", delete(api::keys::delete_key))
+        // Schedules
+        .route("/api/schedules", get(api::schedules::list_schedules))
+        .route("/api/schedules", post(api::schedules::create_schedule))
+        .route("/api/schedules/:id", put(api::schedules::update_schedule))
+        .route("/api/schedules/:id", delete(api::schedules::delete_schedule))
+        // Notifications
+        .route(
+            "/api/notifications/channels",
+            get(api::notifications::list_channels),
+        )
+        .route(
+            "/api/notifications/channels",
+            post(api::notifications::create_channel),
+        )
+        .route(
+            "/api/notifications/channels/:id",
+            delete(api::notifications::delete_channel),
+        )
         // Marketplace
         .route("/api/sources", get(api::sources::list_sources))
         .route("/api/sources", post(api::sources::add_source))

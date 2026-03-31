@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import JobLog from '../components/JobLog';
-import { cancelJob, getJobs, type Job } from '../lib/api';
+import { cancelJob, getJobs, rerunJob, type Job } from '../lib/api';
 
 const statusColors: Record<string, string> = {
   success: 'text-green-400',
@@ -18,10 +18,15 @@ const statusBg: Record<string, string> = {
   cancelled: 'bg-gray-600/20',
 };
 
+const ALL_STATUSES = ['success', 'failed', 'running', 'pending', 'cancelled'];
+
 export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState('');
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterRecipe, setFilterRecipe] = useState('');
+  const [search, setSearch] = useState('');
 
   const loadJobs = () => {
     getJobs()
@@ -44,6 +49,43 @@ export default function Jobs() {
     }
   };
 
+  const handleRerun = async (id: string) => {
+    try {
+      await rerunJob(id);
+      loadJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to re-run job');
+    }
+  };
+
+  // Get unique recipe names for filter
+  const recipeNames = [...new Set(jobs.map((j) => j.recipe_name))].sort();
+
+  // Filter jobs
+  const filtered = jobs.filter((j) => {
+    if (filterStatus && j.status !== filterStatus) return false;
+    if (filterRecipe && j.recipe_name !== filterRecipe) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (
+        !j.recipe_name.toLowerCase().includes(q) &&
+        !j.id.toLowerCase().includes(q)
+      )
+        return false;
+    }
+    return true;
+  });
+
+  const formatDuration = (job: Job): string | null => {
+    if (!job.started_at) return null;
+    const start = new Date(job.started_at).getTime();
+    const end = job.finished_at ? new Date(job.finished_at).getTime() : Date.now();
+    const secs = Math.round((end - start) / 1000);
+    if (secs < 60) return `${secs}s`;
+    const mins = Math.floor(secs / 60);
+    return `${mins}m ${secs % 60}s`;
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -62,8 +104,39 @@ export default function Jobs() {
         </div>
       )}
 
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search jobs..."
+          className="flex-1 min-w-[200px] px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-forge-500"
+        />
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-forge-500"
+        >
+          <option value="">All Status</option>
+          {ALL_STATUSES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={filterRecipe}
+          onChange={(e) => setFilterRecipe(e.target.value)}
+          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-forge-500"
+        >
+          <option value="">All Recipes</option>
+          {recipeNames.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="space-y-3">
-        {jobs.map((job) => (
+        {filtered.map((job) => (
           <div
             key={job.id}
             className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden"
@@ -97,25 +170,38 @@ export default function Jobs() {
                       ? new Date(job.created_at).toLocaleString()
                       : '-'}
                   </div>
-                  {job.finished_at && (
+                  {formatDuration(job) && (
                     <div className="text-xs text-gray-600">
-                      Finished:{' '}
-                      {new Date(job.finished_at).toLocaleString()}
+                      Duration: {formatDuration(job)}
                     </div>
                   )}
                 </div>
 
-                {(job.status === 'pending' || job.status === 'running') && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCancel(job.id);
-                    }}
-                    className="px-3 py-1.5 bg-red-600/20 text-red-400 text-xs font-medium rounded-lg hover:bg-red-600/30 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {(job.status === 'success' || job.status === 'failed' || job.status === 'cancelled') && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRerun(job.id);
+                      }}
+                      className="px-3 py-1.5 bg-forge-600/20 text-forge-400 text-xs font-medium rounded-lg hover:bg-forge-600/30 transition-colors"
+                    >
+                      ⟳ Re-run
+                    </button>
+                  )}
+
+                  {(job.status === 'pending' || job.status === 'running') && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCancel(job.id);
+                      }}
+                      className="px-3 py-1.5 bg-red-600/20 text-red-400 text-xs font-medium rounded-lg hover:bg-red-600/30 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
 
                 <span className="text-gray-600 text-sm">
                   {expandedJob === job.id ? '▾' : '▸'}
@@ -144,10 +230,16 @@ export default function Jobs() {
         ))}
       </div>
 
-      {jobs.length === 0 && (
+      {filtered.length === 0 && (
         <div className="text-center py-12 text-gray-500">
-          <p className="text-lg mb-2">No jobs yet</p>
-          <p className="text-sm">Deploy a recipe to create your first job</p>
+          <p className="text-lg mb-2">
+            {jobs.length === 0 ? 'No jobs yet' : 'No jobs match your filter'}
+          </p>
+          <p className="text-sm">
+            {jobs.length === 0
+              ? 'Deploy a recipe to create your first job'
+              : 'Try adjusting your filters'}
+          </p>
         </div>
       )}
     </div>

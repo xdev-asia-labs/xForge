@@ -60,7 +60,7 @@ pub async fn create_server(
         .map(|l| serde_json::to_string(l).unwrap_or_else(|_| "[]".to_string()));
 
     sqlx::query(
-        "INSERT INTO servers (id, name, host, port, ssh_user, ssh_key_path, labels, group_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO servers (id, name, host, port, ssh_user, ssh_key_path, labels, group_name, key_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&payload.name)
@@ -70,6 +70,7 @@ pub async fn create_server(
     .bind(&payload.ssh_key_path)
     .bind(&labels_json)
     .bind(&payload.group_name)
+    .bind(&payload.key_id)
     .execute(&state.db)
     .await
     .map_err(|e| {
@@ -125,9 +126,10 @@ pub async fn update_server(
         .map(|l| serde_json::to_string(&l).unwrap_or_else(|_| "[]".to_string()))
         .or(existing.labels);
     let group_name = payload.group_name.or(existing.group_name);
+    let key_id = payload.key_id.or(existing.key_id);
 
     sqlx::query(
-        "UPDATE servers SET name = ?, host = ?, port = ?, ssh_user = ?, ssh_key_path = ?, labels = ?, group_name = ? WHERE id = ?",
+        "UPDATE servers SET name = ?, host = ?, port = ?, ssh_user = ?, ssh_key_path = ?, labels = ?, group_name = ?, key_id = ? WHERE id = ?",
     )
     .bind(&name)
     .bind(&host)
@@ -136,6 +138,7 @@ pub async fn update_server(
     .bind(&ssh_key_path)
     .bind(&labels_json)
     .bind(&group_name)
+    .bind(&key_id)
     .bind(&id)
     .execute(&state.db)
     .await
@@ -228,4 +231,84 @@ pub async fn health_check(
         "status": status_str,
         "checked_at": now.to_string()
     })))
+}
+
+// ─── Server Groups ────────────────────────────────────────────────────────────
+
+pub async fn list_groups(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<serde_json::Value>)> {
+    let groups: Vec<(Option<String>, i64, i64)> = sqlx::query_as(
+        "SELECT group_name, COUNT(*) as count, SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online FROM servers GROUP BY group_name ORDER BY group_name",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Database error: {}", e)})),
+        )
+    })?;
+
+    let result: Vec<serde_json::Value> = groups
+        .into_iter()
+        .map(|(name, count, online)| {
+            json!({
+                "name": name.unwrap_or_else(|| "ungrouped".to_string()),
+                "server_count": count,
+                "online_count": online
+            })
+        })
+        .collect();
+
+    Ok(Json(result))
+}
+
+// ─── Bulk Operations ──────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct BulkServerIds {
+    pub server_ids: Vec<String>,
+}
+
+pub async fn bulk_health_check(
+    State(state): State<AppState>,
+    Json(payload): Json<BulkServerIds>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<serde_json::Value>)> {
+    let mut results = Vec::new();
+
+    for server_id in &payload.server_ids {
+        let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+            .bind(server_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Database error: {}", e)})),
+                )
+            })?;
+
+        if let Some(server) = server {
+            let online = crate::ssh::check_health(&server).await;
+            let status_str = if online { "online" } else { "offline" };
+            let now = chrono::Utc::now().naive_utc();
+
+            sqlx::query("UPDATE servers SET status = ?, last_health_check = ? WHERE id = ?")
+                .bind(status_str)
+                .bind(now)
+                .bind(server_id)
+                .execute(&state.db)
+                .await
+                .ok();
+
+            results.push(json!({
+                "id": server_id,
+                "status": status_str,
+                "checked_at": now.to_string()
+            }));
+        }
+    }
+
+    Ok(Json(results))
 }

@@ -85,6 +85,17 @@ pub async fn execute_job(state: &AppState, job_id: &str, recipe_name: &str) -> R
             .execute(&state.db)
             .await?;
             info!("Job {} completed with status: {}", job_id, status);
+
+            // Send notification
+            let event = if status == "success" {
+                "job.success"
+            } else {
+                "job.failed"
+            };
+            crate::api::notifications::send_job_notification(
+                &state.db, event, job_id, recipe_name, status,
+            )
+            .await;
         }
         Err(e) => {
             error!("Job {} execution error: {}", job_id, e);
@@ -96,6 +107,12 @@ pub async fn execute_job(state: &AppState, job_id: &str, recipe_name: &str) -> R
             .bind(job_id)
             .execute(&state.db)
             .await?;
+
+            // Send failure notification
+            crate::api::notifications::send_job_notification(
+                &state.db, "job.failed", job_id, recipe_name, "failed",
+            )
+            .await;
         }
     }
 

@@ -53,12 +53,20 @@ export async function login(username: string, password: string) {
 }
 
 // Dashboard
+export interface DashboardStats {
+  server_count: number;
+  servers_online: number;
+  servers_offline: number;
+  active_jobs: number;
+  total_jobs: number;
+  successful_jobs: number;
+  failed_jobs: number;
+  recent_jobs: Job[];
+  active_schedules: number;
+}
+
 export async function getDashboard() {
-  return request<{
-    server_count: number;
-    active_jobs: number;
-    recent_jobs: Job[];
-  }>('/dashboard');
+  return request<DashboardStats>('/dashboard');
 }
 
 // Servers
@@ -69,6 +77,7 @@ export interface Server {
   port: number;
   ssh_user: string;
   ssh_key_path: string | null;
+  key_id: string | null;
   labels: string[];
   group_name: string | null;
   status: string;
@@ -222,4 +231,200 @@ export async function installRecipe(sourceId: string, slug: string) {
     `/sources/${sourceId}/recipes/${encodeURIComponent(slug)}/install`,
     { method: 'POST' }
   );
+}
+
+// ─── Server Groups ────────────────────────────────────────────────────────────
+
+export interface ServerGroup {
+  name: string;
+  server_count: number;
+  online_count: number;
+}
+
+export async function getServerGroups() {
+  return request<ServerGroup[]>('/servers/groups');
+}
+
+export async function bulkHealthCheck(serverIds: string[]) {
+  return request<{ id: string; status: string; checked_at: string }[]>(
+    '/servers/bulk/health-check',
+    { method: 'POST', body: JSON.stringify({ server_ids: serverIds }) }
+  );
+}
+
+// ─── Job Re-run ───────────────────────────────────────────────────────────────
+
+export async function rerunJob(id: string) {
+  return request<Job>(`/jobs/${id}/rerun`, { method: 'POST' });
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  username: string;
+  role: string;
+  email: string | null;
+  display_name: string | null;
+  created_at: string | null;
+}
+
+export async function getUsers() {
+  return request<User[]>('/users');
+}
+
+export async function getCurrentUser() {
+  return request<User>('/users/me');
+}
+
+export async function createUser(data: {
+  username: string;
+  password: string;
+  role: string;
+  email?: string;
+  display_name?: string;
+}) {
+  return request<User>('/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUser(
+  id: string,
+  data: { password?: string; role?: string; email?: string; display_name?: string }
+) {
+  return request<User>(`/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteUser(id: string) {
+  return request<void>(`/users/${id}`, { method: 'DELETE' });
+}
+
+// ─── Key Store ────────────────────────────────────────────────────────────────
+
+export interface KeyStoreEntry {
+  id: string;
+  name: string;
+  key_type: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export async function getKeys() {
+  return request<KeyStoreEntry[]>('/keys');
+}
+
+export async function createKey(data: {
+  name: string;
+  key_type: string;
+  key_data: string;
+  description?: string;
+}) {
+  return request<KeyStoreEntry>('/keys', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteKey(id: string) {
+  return request<void>(`/keys/${id}`, { method: 'DELETE' });
+}
+
+// ─── Schedules ────────────────────────────────────────────────────────────────
+
+export interface Schedule {
+  id: string;
+  name: string;
+  recipe_name: string;
+  server_ids: string[];
+  params: Record<string, unknown> | null;
+  cron_expression: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export async function getSchedules() {
+  return request<Schedule[]>('/schedules');
+}
+
+export async function createSchedule(data: {
+  name: string;
+  recipe_name: string;
+  server_ids: string[];
+  params?: Record<string, unknown>;
+  cron_expression: string;
+}) {
+  return request<Schedule>('/schedules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateSchedule(
+  id: string,
+  data: {
+    name?: string;
+    cron_expression?: string;
+    server_ids?: string[];
+    params?: Record<string, unknown>;
+    enabled?: boolean;
+  }
+) {
+  return request<Schedule>(`/schedules/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteSchedule(id: string) {
+  return request<void>(`/schedules/${id}`, { method: 'DELETE' });
+}
+
+// ─── Notification Channels ───────────────────────────────────────────────────
+
+export interface NotificationChannel {
+  id: string;
+  name: string;
+  channel_type: string;
+  config: Record<string, unknown>;
+  events: string[];
+  enabled: boolean;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export async function getNotificationChannels() {
+  return request<NotificationChannel[]>('/notifications/channels');
+}
+
+export async function createNotificationChannel(data: {
+  name: string;
+  channel_type: string;
+  config: Record<string, unknown>;
+  events: string[];
+}) {
+  return request<NotificationChannel>('/notifications/channels', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteNotificationChannel(id: string) {
+  return request<void>(`/notifications/channels/${id}`, { method: 'DELETE' });
+}
+
+// ─── Terminal ─────────────────────────────────────────────────────────────────
+
+export function getTerminalWsUrl(serverId: string): string {
+  const token = getToken();
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/api/terminal?server_id=${encodeURIComponent(serverId)}&token=${encodeURIComponent(token || '')}`;
 }

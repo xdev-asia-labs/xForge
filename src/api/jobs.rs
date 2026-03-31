@@ -213,33 +213,117 @@ pub async fn cancel_job(
 pub async fn dashboard(
     State(state): State<AppState>,
 ) -> Result<Json<DashboardStats>, (StatusCode, Json<serde_json::Value>)> {
+    let db_err = |e: sqlx::Error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Database error: {}", e)})),
+        )
+    };
+
     let server_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM servers")
             .fetch_one(&state.db)
             .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("Database error: {}", e)})),
-                )
-            })?;
+            .map_err(db_err)?;
+
+    let servers_online: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM servers WHERE status = 'online'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(db_err)?;
+
+    let servers_offline: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM servers WHERE status = 'offline'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(db_err)?;
 
     let active_jobs: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM jobs WHERE status IN ('pending', 'running')",
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Database error: {}", e)})),
-        )
-    })?;
+    .map_err(db_err)?;
+
+    let total_jobs: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM jobs")
+            .fetch_one(&state.db)
+            .await
+            .map_err(db_err)?;
+
+    let successful_jobs: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM jobs WHERE status = 'success'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(db_err)?;
+
+    let failed_jobs: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM jobs WHERE status = 'failed'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(db_err)?;
+
+    let active_schedules: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM schedules WHERE enabled = 1")
+            .fetch_one(&state.db)
+            .await
+            .map_err(db_err)?;
 
     let recent_jobs = sqlx::query_as::<_, Job>(
         "SELECT * FROM jobs ORDER BY created_at DESC LIMIT 10",
     )
     .fetch_all(&state.db)
+    .await
+    .map_err(db_err)?;
+
+    Ok(Json(DashboardStats {
+        server_count: server_count.0,
+        servers_online: servers_online.0,
+        servers_offline: servers_offline.0,
+        active_jobs: active_jobs.0,
+        total_jobs: total_jobs.0,
+        successful_jobs: successful_jobs.0,
+        failed_jobs: failed_jobs.0,
+        recent_jobs: recent_jobs.into_iter().map(JobResponse::from).collect(),
+        active_schedules: active_schedules.0,
+    }))
+}
+
+// ─── Re-run a job ─────────────────────────────────────────────────────────────
+
+pub async fn rerun_job(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<JobResponse>), (StatusCode, Json<serde_json::Value>)> {
+    let original = sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database error: {}", e)})),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Job not found"})),
+            )
+        })?;
+
+    // Create new job with same params
+    let new_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO jobs (id, recipe_name, server_ids, params, status, created_by) VALUES (?, ?, ?, ?, 'pending', ?)",
+    )
+    .bind(&new_id)
+    .bind(&original.recipe_name)
+    .bind(&original.server_ids)
+    .bind(&original.params)
+    .bind(&claims.sub)
+    .execute(&state.db)
     .await
     .map_err(|e| {
         (
@@ -248,9 +332,27 @@ pub async fn dashboard(
         )
     })?;
 
-    Ok(Json(DashboardStats {
-        server_count: server_count.0,
-        active_jobs: active_jobs.0,
-        recent_jobs: recent_jobs.into_iter().map(JobResponse::from).collect(),
-    }))
+    // Spawn execution
+    let job_state = state.clone();
+    let job_id = new_id.clone();
+    let recipe_name = original.recipe_name.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::core::job_queue::execute_job(&job_state, &job_id, &recipe_name).await
+        {
+            tracing::error!("Re-run job {} failed: {}", job_id, e);
+        }
+    });
+
+    let job = sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = ?")
+        .bind(&new_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database error: {}", e)})),
+            )
+        })?;
+
+    Ok((StatusCode::CREATED, Json(JobResponse::from(job))))
 }
