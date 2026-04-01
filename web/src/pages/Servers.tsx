@@ -320,6 +320,13 @@ export default function Servers() {
                   >
                     ⏵ SSH
                   </button>
+                  <button
+                    onClick={() => navigate(`/servers/${server.id}/audit`)}
+                    className="absolute top-12 right-3 px-2 py-1 bg-gray-800/80 text-gray-300 text-xs rounded hover:bg-forge-600/30 hover:text-forge-400 transition-colors"
+                    title="Security Audit"
+                  >
+                    🛡 Audit
+                  </button>
                 </div>
               ))}
             </div>

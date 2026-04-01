@@ -98,37 +98,37 @@ async fn main() -> anyhow::Result<()> {
             "/api/servers/bulk/health-check",
             post(api::servers::bulk_health_check),
         )
-        .route("/api/servers/:id", get(api::servers::get_server))
-        .route("/api/servers/:id", put(api::servers::update_server))
-        .route("/api/servers/:id", delete(api::servers::delete_server))
+        .route("/api/servers/{id}", get(api::servers::get_server))
+        .route("/api/servers/{id}", put(api::servers::update_server))
+        .route("/api/servers/{id}", delete(api::servers::delete_server))
         .route(
-            "/api/servers/:id/health",
+            "/api/servers/{id}/health",
             post(api::servers::health_check),
         )
         // Recipes
         .route("/api/recipes", get(api::recipes::list_recipes))
-        .route("/api/recipes/:name", get(api::recipes::get_recipe))
+        .route("/api/recipes/{name}", get(api::recipes::get_recipe))
         // Jobs
         .route("/api/jobs", get(api::jobs::list_jobs))
         .route("/api/jobs", post(api::jobs::create_job))
-        .route("/api/jobs/:id", get(api::jobs::get_job))
-        .route("/api/jobs/:id/cancel", post(api::jobs::cancel_job))
-        .route("/api/jobs/:id/rerun", post(api::jobs::rerun_job))
+        .route("/api/jobs/{id}", get(api::jobs::get_job))
+        .route("/api/jobs/{id}/cancel", post(api::jobs::cancel_job))
+        .route("/api/jobs/{id}/rerun", post(api::jobs::rerun_job))
         // Users
         .route("/api/users", get(api::users::list_users))
         .route("/api/users", post(api::users::create_user))
         .route("/api/users/me", get(api::users::get_current_user))
-        .route("/api/users/:id", put(api::users::update_user))
-        .route("/api/users/:id", delete(api::users::delete_user))
+        .route("/api/users/{id}", put(api::users::update_user))
+        .route("/api/users/{id}", delete(api::users::delete_user))
         // Key Store
         .route("/api/keys", get(api::keys::list_keys))
         .route("/api/keys", post(api::keys::create_key))
-        .route("/api/keys/:id", delete(api::keys::delete_key))
+        .route("/api/keys/{id}", delete(api::keys::delete_key))
         // Schedules
         .route("/api/schedules", get(api::schedules::list_schedules))
         .route("/api/schedules", post(api::schedules::create_schedule))
-        .route("/api/schedules/:id", put(api::schedules::update_schedule))
-        .route("/api/schedules/:id", delete(api::schedules::delete_schedule))
+        .route("/api/schedules/{id}", put(api::schedules::update_schedule))
+        .route("/api/schedules/{id}", delete(api::schedules::delete_schedule))
         // Notifications
         .route(
             "/api/notifications/channels",
@@ -139,20 +139,30 @@ async fn main() -> anyhow::Result<()> {
             post(api::notifications::create_channel),
         )
         .route(
-            "/api/notifications/channels/:id",
+            "/api/notifications/channels/{id}",
             delete(api::notifications::delete_channel),
         )
         // Marketplace
         .route("/api/sources", get(api::sources::list_sources))
         .route("/api/sources", post(api::sources::add_source))
-        .route("/api/sources/:id", delete(api::sources::delete_source))
-        .route("/api/sources/:id/sync", post(api::sources::sync_source))
+        .route("/api/sources/{id}", delete(api::sources::delete_source))
+        .route("/api/sources/{id}/sync", post(api::sources::sync_source))
         .route(
-            "/api/sources/:source_id/recipes/:slug/install",
+            "/api/sources/{source_id}/recipes/{slug}/install",
             post(api::sources::install_recipe),
         )
         // Audit log
         .route("/api/audit", get(api::sources::list_audit_logs))
+        // Security Audits
+        .route(
+            "/api/servers/{id}/audits",
+            post(api::audit::start_audit),
+        )
+        .route(
+            "/api/servers/{id}/audits",
+            get(api::audit::list_audits),
+        )
+        .route("/api/audits/{id}", get(api::audit::get_audit))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             api::auth::auth_middleware,

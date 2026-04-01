@@ -122,7 +122,7 @@ async fn handle_terminal(socket: WebSocket, server: Server, key_data: Option<Key
         Ok(c) => c,
         Err(e) => {
             let msg = json!({"type": "error", "data": format!("Failed to start SSH: {}", e)});
-            let _ = ws_sender.send(Message::Text(msg.to_string())).await;
+            let _ = ws_sender.send(Message::Text(msg.to_string().into())).await;
             return;
         }
     };
@@ -133,7 +133,7 @@ async fn handle_terminal(socket: WebSocket, server: Server, key_data: Option<Key
 
     // Send connected message
     let msg = json!({"type": "status", "data": "connected"});
-    let _ = ws_sender.send(Message::Text(msg.to_string())).await;
+    let _ = ws_sender.send(Message::Text(msg.to_string().into())).await;
 
     // Task: stdout → WS
     let ws_sender_clone = std::sync::Arc::new(tokio::sync::Mutex::new(ws_sender));
@@ -148,7 +148,7 @@ async fn handle_terminal(socket: WebSocket, server: Server, key_data: Option<Key
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     let msg = json!({"type": "output", "data": text});
                     let mut sender = ws_sender_for_stdout.lock().await;
-                    if sender.send(Message::Text(msg.to_string())).await.is_err() {
+                    if sender.send(Message::Text(msg.to_string().into())).await.is_err() {
                         break;
                     }
                 }
@@ -169,7 +169,7 @@ async fn handle_terminal(socket: WebSocket, server: Server, key_data: Option<Key
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     let msg = json!({"type": "output", "data": text});
                     let mut sender = ws_sender_for_stderr.lock().await;
-                    if sender.send(Message::Text(msg.to_string())).await.is_err() {
+                    if sender.send(Message::Text(msg.to_string().into())).await.is_err() {
                         break;
                     }
                 }
@@ -228,5 +228,5 @@ async fn handle_terminal(socket: WebSocket, server: Server, key_data: Option<Key
     let ws_sender_final = ws_sender_clone.clone();
     let msg = json!({"type": "status", "data": "disconnected"});
     let mut sender = ws_sender_final.lock().await;
-    let _ = sender.send(Message::Text(msg.to_string())).await;
+    let _ = sender.send(Message::Text(msg.to_string().into())).await;
 }

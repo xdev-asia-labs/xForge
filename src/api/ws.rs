@@ -44,7 +44,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, job_id: Option<String
                 }
             }
 
-            if sender.send(Message::Text(msg)).await.is_err() {
+            if sender.send(Message::Text(msg.into())).await.is_err() {
                 break;
             }
         }

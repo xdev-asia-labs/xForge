@@ -6,55 +6,50 @@ description = "Web-based infrastructure management tool"
 
 [dependencies]
 # Web framework
-axum = { version = "0.7", features = ["ws", "macros"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
+axum = { version = "0.8", features = ["ws", "macros"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 
 # Database
-sqlx = { version = "0.7", features = [
-    "runtime-tokio-rustls",
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "tls-rustls",
     "sqlite",
     "migrate",
     "chrono",
 ] }
 
 # Auth
-jsonwebtoken = "9"
-bcrypt = "0.15"
+jsonwebtoken = "10"
+bcrypt = "0.19"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 
-# WebSocket
-tokio-tungstenite = "0.21"
+# WebSocket / Async streams
 futures = "0.3"
 
 # Cron scheduling
-cron = "0.12"
+cron = "0.16"
 
 # HTTP client (webhooks)
-reqwest = { version = "0.12", features = [
+reqwest = { version = "0.13", features = [
     "json",
-    "rustls-tls",
+    "rustls",
 ], default-features = false }
 
 # Utilities
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
-thiserror = "1"
+thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
-
-# SSH
-russh = "0.44"
-russh-keys = "0.44"
-async-trait = "0.1"
 
 # Static file embedding
 rust-embed = { version = "8", features = ["mime-guess"] }

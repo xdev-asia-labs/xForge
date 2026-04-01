@@ -474,3 +474,61 @@ pub struct CreateNotificationChannel {
     pub config: serde_json::Value,
     pub events: Vec<String>,
 }
+
+// ─── Security Audits ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct SecurityAudit {
+    pub id: String,
+    pub server_id: String,
+    pub status: String,
+    pub score: Option<i64>,
+    pub results: Option<String>,
+    pub started_at: Option<NaiveDateTime>,
+    pub finished_at: Option<NaiveDateTime>,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityAuditResponse {
+    pub id: String,
+    pub server_id: String,
+    pub status: String,
+    pub score: Option<i64>,
+    pub results: Option<Vec<SecurityCheckResult>>,
+    pub started_at: Option<NaiveDateTime>,
+    pub finished_at: Option<NaiveDateTime>,
+    pub created_by: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityCheckResult {
+    pub name: String,
+    pub category: String,
+    pub status: String,    // pass | warn | fail
+    pub detail: String,
+    pub points: i64,       // points earned
+    pub max_points: i64,   // max possible
+}
+
+impl From<SecurityAudit> for SecurityAuditResponse {
+    fn from(a: SecurityAudit) -> Self {
+        let results: Option<Vec<SecurityCheckResult>> = a
+            .results
+            .as_deref()
+            .and_then(|r| serde_json::from_str(r).ok());
+        SecurityAuditResponse {
+            id: a.id,
+            server_id: a.server_id,
+            status: a.status,
+            score: a.score,
+            results,
+            started_at: a.started_at,
+            finished_at: a.finished_at,
+            created_by: a.created_by,
+            created_at: a.created_at,
+        }
+    }
+}

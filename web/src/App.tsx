@@ -9,6 +9,7 @@ import Marketplace from './pages/Marketplace';
 import Recipes from './pages/Recipes';
 import Schedules from './pages/Schedules';
 import Servers from './pages/Servers';
+import SecurityAudit from './pages/SecurityAudit';
 import ServerTerminal from './pages/ServerTerminal';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
@@ -47,6 +48,7 @@ function App() {
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
         <Route path="terminal/:id" element={<ServerTerminal />} />
+        <Route path="servers/:id/audit" element={<SecurityAudit />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

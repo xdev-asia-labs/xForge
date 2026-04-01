@@ -428,3 +428,40 @@ export function getTerminalWsUrl(serverId: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/api/terminal?server_id=${encodeURIComponent(serverId)}&token=${encodeURIComponent(token || '')}`;
 }
+
+// ─── Security Audits ──────────────────────────────────────────────────────────
+
+export interface SecurityCheckResult {
+  name: string;
+  category: string;
+  status: string;
+  detail: string;
+  points: number;
+  max_points: number;
+}
+
+export interface SecurityAudit {
+  id: string;
+  server_id: string;
+  status: string;
+  score: number | null;
+  results: SecurityCheckResult[] | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export async function startAudit(serverId: string) {
+  return request<SecurityAudit>(`/servers/${serverId}/audits`, {
+    method: 'POST',
+  });
+}
+
+export async function getServerAudits(serverId: string) {
+  return request<SecurityAudit[]>(`/servers/${serverId}/audits`);
+}
+
+export async function getAudit(id: string) {
+  return request<SecurityAudit>(`/audits/${id}`);
+}
