@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  getAudit,
-  getServer,
-  getServerAudits,
-  startAudit,
-  type SecurityAudit,
-  type Server,
+    getAudit,
+    getServer,
+    getServerAudits,
+    startAudit,
+    type SecurityAudit,
+    type Server,
 } from '../lib/api';
 
 export default function SecurityAuditPage() {
