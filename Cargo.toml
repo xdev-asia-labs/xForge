@@ -22,7 +22,7 @@ sqlx = { version = "0.8", features = [
 ] }
 
 # Auth
-jsonwebtoken = "10"
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 bcrypt = "0.19"
 
 # Serialization
